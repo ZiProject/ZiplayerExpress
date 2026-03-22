@@ -7,15 +7,15 @@ A modular Discord voice player with plugin system for @discordjs/voice.
 ## Features
 
 - Message commands: !play, !skip, !stop, !pause, !resume,!volume, !queue, !np, !shuffle, !loop, !autoplay
-- Buttons (B*player*\*): refresh, previous, pause/resume, next,stop, search (mở Modal), autoPlay
+- Buttons (B*player*): refresh, previous, pause/resume, next,stop, search, autoPlay
 - Select menus (S_player_Func): Loop, AutoPlay, Queue, Mute/Unmute, Vol±, Lyrics toggle, Shuffle, Lock,
-- Player events: trackStart, trackEnd, queueEnd, playerStop,playerPause, playerResume, volumeChange, playerDestroy,playerError,
-  queueAdd, filterApplied, lyricsCreate
+- Player events: trackStart, trackEnd, queueEnd, playerStop,playerPause, playerResume, volumeChange, playerDestroy, playerError,
+  queueAdd
 
 ## Installation
 
 ```bash
-npm install @ziplayer/express discord.js
+npm install @ziplayer/express discord.js opusscript
 ```
 
 ## Quick Start
