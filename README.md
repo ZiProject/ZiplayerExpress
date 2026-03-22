@@ -26,12 +26,25 @@ import { Client, GatewayIntentBits } from "discord.js";
 const client = new Client({
 	intents: [GatewayIntentBits.GuildVoiceStates],
 });
-const player = new Player({
-	client: client,
+const player = new Player(client, {
+	prefix: "!",
 });
-player.init();
 client.login("YOUR BOT TOKEN");
 ```
+
+## CMD:
+
+- play
+- skip
+- stop
+- pause
+- resume
+- queue
+- vol, volume
+- np, nowplaying
+- shuffle
+- loop
+- autoplay
 
 ## Useful Links
 
