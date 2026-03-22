@@ -1,0 +1,35 @@
+{
+	"name": "@ziplayer/express",
+	"version": "0.2.2",
+	"description": "A modular Discord voice player with plugin system",
+	"keywords": [
+		"ZiPlayer",
+		"discord",
+		"music",
+		"player",
+		"voice",
+		"@ziplayer/plugin"
+	],
+	"homepage": "https://player.ziji.world",
+	"bugs": {
+		"url": "https://github.com/ZiProject/ZiplayerExpress/issues"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/ZiProject/ZiplayerExpress.git"
+	},
+	"main": "dist/index.js",
+	"types": "dist/index.d.ts",
+	"scripts": {
+		"build": "tsc",
+		"dev": "tsc --watch",
+		"prepare": "npm run build"
+	},
+	"dependencies": {
+		"@ziplayer/plugin": "^0.2.3",
+		"@ziplayer/ytexecplug": "^0.0.2",
+		"discord.js": "^14.25.1",
+		"opusscript": "^0.1.1",
+		"ziplayer": "^0.2.4"
+	}
+}
