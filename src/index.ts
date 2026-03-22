@@ -22,6 +22,7 @@ import {
 	ColorResolvable,
 	ComponentEmojiResolvable,
 	GatewayIntentBits,
+	BaseMessageOptions,
 } from "discord.js";
 import { PlayerManager, Player, Track, BasePlugin, BaseExtension, SearchResult, PlayerOptions } from "ziplayer";
 import { YouTubePlugin, SoundCloudPlugin, AttachmentsPlugin } from "@ziplayer/plugin";
@@ -159,6 +160,9 @@ export class ZiMusicBot {
 
 		this._registerDiscordEvents();
 		this._attachPlayerEvents();
+		this.debug(
+			`Initialized — prefix="${this.prefix}" volume=${this.defaultVolume} leaveOnEnd=${this.leaveOnEnd} leaveTimeout=${this.leaveTimeout}ms`,
+		);
 	}
 
 	private debug(message?: any, ...optionalParams: any[]): void {
@@ -167,58 +171,42 @@ export class ZiMusicBot {
 
 	// ─── Discord listeners ─────────────────────────────────────────────────────
 	private _checkClient(): void {
-		if (!this.client.options.intents.has(GatewayIntentBits.GuildVoiceStates))
-			throw new Error(
-				"GatewayIntentBits GuildVoiceStates not install in client\n" +
-					`Please create Client with intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildVoiceStates,
-    GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMessages,
-  ], `,
-			);
-		if (!this.client.options.intents.has(GatewayIntentBits.MessageContent))
-			throw new Error(
-				"GatewayIntentBits MessageContent not install in client\n" +
-					`Please create Client with intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildVoiceStates,
-    GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMessages,
-  ], `,
-			);
-		if (!this.client.options.intents.has(GatewayIntentBits.GuildMessages))
-			throw new Error(
-				"GatewayIntentBits GuildMessages not install in client\n" +
-					`Please create Client with intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildVoiceStates,
-    GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMessages,
-  ], `,
-			);
-		if (!this.client.options.intents.has(GatewayIntentBits.Guilds))
-			throw new Error(
-				"GatewayIntentBits Guilds not install in client\n" +
-					`Please create Client with intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildVoiceStates,
-    GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMessages,
-  ], `,
-			);
+		const msg = (t: string) =>
+			"GatewayIntentBits " +
+			t +
+			" not install in client\n" +
+			"Please create Client with intents: [\n" +
+			" GatewayIntentBits.Guilds,\n" +
+			" GatewayIntentBits.GuildVoiceStates,\n" +
+			" GatewayIntentBits.MessageContent,\n" +
+			" GatewayIntentBits.GuildMessages,\n" +
+			"]\n";
+		if (!this.client.options.intents.has(GatewayIntentBits.GuildVoiceStates)) throw new Error(msg("GuildVoiceStates"));
+		if (!this.client.options.intents.has(GatewayIntentBits.MessageContent)) throw new Error(msg("MessageContent"));
+		if (!this.client.options.intents.has(GatewayIntentBits.GuildMessages)) throw new Error(msg("GuildMessages"));
+		if (!this.client.options.intents.has(GatewayIntentBits.Guilds)) throw new Error(msg("Guilds"));
 		return;
 	}
 	private _registerDiscordEvents(): void {
+		this.debug("Registering Discord events: InteractionCreate, MessageCreate");
 		this.client.on(Events.InteractionCreate, (i: any) => this._onInteraction(i as BaseInteraction));
 		this.client.on(Events.MessageCreate, (m: any) => this._onMessage(m));
 	}
 
 	private async _onInteraction(interaction: BaseInteraction): Promise<void> {
 		try {
-			if ((interaction as ButtonInteraction).isButton()) return await this._handleButton(interaction as ButtonInteraction);
-			if ((interaction as StringSelectMenuInteraction).isStringSelectMenu())
+			if ((interaction as ButtonInteraction).isButton()) {
+				this.debug(
+					`Button interaction received — customId="${(interaction as ButtonInteraction).customId}" guild=${interaction.guildId}`,
+				);
+				return await this._handleButton(interaction as ButtonInteraction);
+			}
+			if ((interaction as StringSelectMenuInteraction).isStringSelectMenu()) {
+				this.debug(
+					`SelectMenu interaction received — customId="${(interaction as StringSelectMenuInteraction).customId}" guild=${interaction.guildId}`,
+				);
 				return await this._handleSelect(interaction as StringSelectMenuInteraction);
+			}
 		} catch (err) {
 			console.error("[ZiMusicBot] interactionCreate error:", err);
 			const i = interaction as ButtonInteraction;
@@ -232,6 +220,10 @@ export class ZiMusicBot {
 
 		const args = message.content.slice(this.prefix.length).trim().split(/\s+/);
 		const command = args.shift()!.toLowerCase();
+
+		this.debug(
+			`Message command received — command="${command}" args=${JSON.stringify(args)} guild=${message.guildId} user=${message.author.tag}`,
+		);
 
 		try {
 			switch (command) {
@@ -275,6 +267,8 @@ export class ZiMusicBot {
 
 		const action = interaction.customId.replace("B_player_", "");
 		const player = this.manager.get(interaction.guildId!);
+
+		this.debug(`Button action="${action}" guild=${interaction.guildId} playerExists=${!!player}`);
 
 		if (!player && action !== "refresh")
 			return void interaction.reply({ content: "❌ Không có player đang hoạt động.", ephemeral: true });
@@ -361,6 +355,9 @@ export class ZiMusicBot {
 	// ─── Select menu handler ───────────────────────────────────────────────────
 
 	private async _handleSelect(interaction: StringSelectMenuInteraction): Promise<void> {
+		this.debug(
+			`SelectMenu customId="${interaction.customId}" values=${JSON.stringify(interaction.values)} guild=${interaction.guildId}`,
+		);
 		switch (interaction.customId) {
 			case "S_player_Track":
 				return await this._selectTrack(interaction);
@@ -461,6 +458,10 @@ export class ZiMusicBot {
 			return;
 		}
 
+		this.debug(
+			`_cmdPlay — query="${query}" isUrl=${this._isUrl(query)} guild=${message.guildId} user=${message.author.tag} vc=${vc.id}`,
+		);
+
 		if (this._isUrl(query)) {
 			const player = await this.createPlayer(message.guildId!, vc, message.channel as TextChannel, message.author);
 			await player.play(query, message.author.id);
@@ -494,6 +495,8 @@ export class ZiMusicBot {
 	): Promise<void> {
 		const result: SearchResult = await this.manager.search(query, requestedBy.id).catch(() => ({ tracks: [] }) as any);
 		const tracks: Track[] = result?.tracks ?? [];
+
+		this.debug(`_searchAndShowResults — query="${query}" found=${tracks.length} guild=${guildId} user=${requestedBy.tag}`);
 
 		if (!tracks.length) {
 			const msg = "❌ Không tìm thấy kết quả nào.";
@@ -668,40 +671,56 @@ export class ZiMusicBot {
 	// ─── Player events ─────────────────────────────────────────────────────────
 
 	private _attachPlayerEvents(): void {
+		this.debug("Attaching player events");
 		const update = (p: Player): Promise<void> => this._updatePlayerMessage(p.guildId);
 		const create = (p: Player): Promise<void> => this._sendOrUpdatePlayerMessage(p);
+		const sent = (p: Player, m: BaseMessageOptions): Promise<void> => this._sendAndDelMessage(p, m);
 
 		this.manager.on("trackStart", (_p, _t) => {
-			void update(_p);
+			this.debug(`trackStart — guild=${_p.guildId} track="${_t?.title}" url=${_t?.url}`);
+			void create(_p);
 		});
 		this.manager.on("trackEnd", (_p, _t) => {
+			this.debug(`trackEnd — guild=${_p.guildId} track="${_t?.title}"`);
 			void update(_p);
 		});
 		this.manager.on("queueEnd", (_p) => {
+			this.debug(`queueEnd — guild=${_p.guildId}`);
 			void update(_p);
 		});
 		this.manager.on("playerStop", (_p) => {
+			this.debug(`playerStop — guild=${_p.guildId}`);
 			void update(_p);
 		});
 		this.manager.on("playerPause", (_p, _t) => {
+			this.debug(`playerPause — guild=${_p.guildId}`);
 			void update(_p);
 		});
 		this.manager.on("playerResume", (_p, _t) => {
+			this.debug(`playerResume — guild=${_p.guildId}`);
 			void update(_p);
 		});
 		this.manager.on("volumeChange", (_p, _o, _n) => {
+			this.debug(`volumeChange — guild=${_p.guildId} ${_o} → ${_n}`);
 			void update(_p);
 		});
 		this.manager.on("queueAdd", (_p, _t) => {
+			this.debug(`queueAdd — guild=${_p.guildId} track="${(_t as any)?.title ?? _t}"`);
+			void sent(_p, {
+				embeds: [new EmbedBuilder().setDescription(`Track add: ${_t.title}`).setImage(_t?.thumbnail ?? null)],
+			});
 			void update(_p);
 		});
 		this.manager.on("filterApplied", (_p, _f) => {
+			this.debug(`filterApplied — guild=${_p.guildId} filter=${JSON.stringify(_f)}`);
 			void update(_p);
 		});
 		this.manager.on("filterRemoved", (_p, _f) => {
+			this.debug(`filterRemoved — guild=${_p.guildId} filter=${JSON.stringify(_f)}`);
 			void update(_p);
 		});
 		this.manager.on("playerDestroy", (_p) => {
+			this.debug(`playerDestroy — guild=${_p.guildId}`);
 			try {
 				_p.userdata?.PlayerMessage.delete().catch(() => {});
 			} catch (err) {
@@ -709,9 +728,11 @@ export class ZiMusicBot {
 			}
 		});
 		this.manager.on("playerError", (_p, err) => {
+			this.debug(`playerError — guild=${_p.guildId}`, err);
 			console.error(`[ZiMusicBot][${_p.guildId}] playerError:`, (err as Error)?.message ?? err);
 		});
 		this.manager.on("connectionError", (_p, err) => {
+			this.debug(`connectionError — guild=${_p.guildId}`, err);
 			console.error(`[ZiMusicBot][${_p.guildId}] connectionError:`, (err as Error)?.message ?? err);
 		});
 	}
@@ -756,7 +777,7 @@ export class ZiMusicBot {
 				iconURL: this.client.user?.displayAvatarURL?.({ size: 1024 }) ?? undefined,
 				url: track?.url,
 			})
-			.setDescription(`Volume: **${player.volume}** % - Host: ${requestedBy}`)
+			.setDescription(`Volume: **${player.volume}** % - Host: <@${requestedBy}>`)
 			.setColor(this.color ?? "Random")
 			.setFooter({
 				text: `Requested by: ${requestedBy?.username ?? "Unknown"}`,
@@ -911,14 +932,20 @@ export class ZiMusicBot {
 
 	private async _sendOrUpdatePlayerMessage(player: Player): Promise<void> {
 		const code = await this.renderPlayerUI({ player, tracks: player.currentTrack }).catch(() => null);
-		if (!code) return;
+		if (!code) {
+			this.debug(`_sendOrUpdatePlayerMessage — renderPlayerUI returned null for guild=${player.guildId}`);
+			return;
+		}
 
 		if (!!player.userdata && !!player.userdata.PlayerMessage) {
+			this.debug(`_sendOrUpdatePlayerMessage — editing existing message for guild=${player.guildId}`);
 			await player.userdata.PlayerMessage.edit(code).catch(async () => {
+				this.debug(`_sendOrUpdatePlayerMessage — edit failed, sending new message for guild=${player.guildId}`);
 				const msg = await player.userdata?.textChannel.send(code).catch(() => null);
 				if (msg && player.userdata) player.userdata.PlayerMessage = msg;
 			});
 		} else {
+			this.debug(`_sendOrUpdatePlayerMessage — sending new message for guild=${player.guildId}`);
 			const msg = await player.userdata?.textChannel.send(code).catch(() => null);
 			if (msg && player.userdata) player.userdata.PlayerMessage = msg;
 		}
@@ -926,13 +953,27 @@ export class ZiMusicBot {
 
 	private async _updatePlayerMessage(guildId: string, track?: Track | null): Promise<void> {
 		const player = this.manager.get(guildId);
-		if (!player || !player.userdata?.PlayerMessage) return;
+		if (!player || !player.userdata?.PlayerMessage) {
+			this.debug(`_updatePlayerMessage — skipped (no player or no message) guild=${guildId}`);
+			return;
+		}
 
+		this.debug(`_updatePlayerMessage — guild=${guildId} track="${track?.title ?? player.currentTrack?.title ?? "none"}"`);
 		const code = await this.renderPlayerUI({
 			player,
 			tracks: track ?? player.currentTrack,
 		}).catch(() => null);
 		if (code) await player.userdata.PlayerMessage.edit(code).catch(() => {});
+	}
+	private async _sendAndDelMessage(player: Player, messagePayload: BaseMessageOptions) {
+		try {
+			const mes = await (player.userdata!.textChannel as TextChannel).send(messagePayload);
+			setTimeout(() => {
+				mes.delete();
+			}, 5000);
+		} catch (e) {
+			this.debug("Error Send And Delete Message", e);
+		}
 	}
 
 	// ─── Utilities ─────────────────────────────────────────────────────────────
@@ -953,6 +994,7 @@ export class ZiMusicBot {
 	 * Dùng để tích hợp slash commands từ bên ngoài class.
 	 */
 	async createPlayer(guildId: string, voiceChannel: VoiceChannel, textChannel: TextChannel, requestedBy: User): Promise<Player> {
+		this.debug(`createPlayer — guild=${guildId} vc=${voiceChannel.id} tc=${textChannel.id} user=${requestedBy.tag}`);
 		const player = await this.manager.create(guildId!, {
 			leaveOnEnd: this.leaveOnEnd,
 			leaveTimeout: this.leaveTimeout,
@@ -960,7 +1002,10 @@ export class ZiMusicBot {
 			...this.options.playerOptions,
 		});
 		if (!player?.connection) {
+			this.debug(`createPlayer — connecting to vc=${voiceChannel.id}`);
 			await player.connect(voiceChannel);
+		} else {
+			this.debug(`createPlayer — already connected, reusing player for guild=${guildId}`);
 		}
 		return player;
 	}
@@ -971,6 +1016,7 @@ export class ZiMusicBot {
 	async play(guildId: string, query: string, user: User): Promise<void> {
 		const player = this.manager.get(guildId);
 		if (!player) throw new Error(`No active player for guild ${guildId}. Call createPlayer first.`);
+		this.debug(`play — guild=${guildId} query="${query}" user=${user.tag}`);
 		await player.play(query, user.id);
 		await this._sendOrUpdatePlayerMessage(player);
 	}
