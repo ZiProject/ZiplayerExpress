@@ -21,19 +21,32 @@ npm install @ziplayer/express discord.js
 ## Quick Start
 
 ```typescript
-import { Player } from "@ziplayer/express";
+import { ZiMusicBot } from "@ziplayer/express";
 import { Client, GatewayIntentBits } from "discord.js";
+
+//discordjs Client
 const client = new Client({
-	intents: [GatewayIntentBits.GuildVoiceStates],
+	intents: [
+		GatewayIntentBits.Guilds,
+		GatewayIntentBits.GuildVoiceStates,
+		GatewayIntentBits.MessageContent,
+		GatewayIntentBits.GuildMessages,
+	],
 });
-const player = new Player(client, {
+
+const ZMusic = new ZiMusicBot(client, {
 	prefix: "!",
 });
+// for slash cmd:
+await ZMusic.createPlayer(guildId, VoiceChannel, TextChannel, User);
+ZMusic.play("QUERY");
+
 client.login("YOUR BOT TOKEN");
 ```
 
 ## CMD:
 
+- search
 - play
 - skip
 - stop

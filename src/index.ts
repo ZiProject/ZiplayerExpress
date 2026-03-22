@@ -23,7 +23,7 @@ import {
 	ComponentEmojiResolvable,
 	GatewayIntentBits,
 } from "discord.js";
-import { PlayerManager, Player, Track, BasePlugin, BaseExtension } from "ziplayer";
+import { PlayerManager, Player, Track, BasePlugin, BaseExtension, SearchResult, PlayerOptions } from "ziplayer";
 import { YouTubePlugin, SoundCloudPlugin, AttachmentsPlugin } from "@ziplayer/plugin";
 import { YTexec } from "@ziplayer/ytexecplug";
 // ─────────────────────────────────────────────────────────────────────────────
@@ -48,7 +48,6 @@ const defaultplayerIcon = {
 	voldec: "🔉",
 	shuffle: "🔀",
 	fillter: "🎛️",
-	lyrics: "📝",
 	Lock: "🔒",
 	UnLock: "🔓",
 	Playbutton: "▶️",
@@ -75,7 +74,6 @@ export interface iconType {
 	voldec: ComponentEmojiResolvable;
 	shuffle: ComponentEmojiResolvable;
 	fillter: ComponentEmojiResolvable;
-	lyrics: ComponentEmojiResolvable;
 	Lock: ComponentEmojiResolvable;
 	UnLock: ComponentEmojiResolvable;
 	Playbutton: ComponentEmojiResolvable;
@@ -93,18 +91,12 @@ export interface ZiMusicBotOptions {
 	leaveOnEnd?: boolean;
 	/** Thời gian chờ ms trước khi rời (mặc định: 60_000) */
 	leaveTimeout?: number;
-	/** Giới hạn số bài trong queue (mặc định: 500) */
-	maxQueueSize?: number;
 	/** Tuỳ chọn bổ sung truyền thẳng vào PlayerManager */
 	managerOptions?: Record<string, unknown>;
 	color?: ColorResolvable | null;
 	icon?: iconType;
-	debug?: (a: any) => {};
-}
-
-interface PlayerMessageEntry {
-	message: Message;
-	channelId: string;
+	debug?: (message?: any, ...optionalParams: any[]) => any;
+	playerOptions?: PlayerOptions;
 }
 
 interface PlayerFuncInput {
@@ -124,11 +116,9 @@ interface PlayerFuncInput {
  *
  * @example
  * ```ts
- * import ZiMusicBot  from "./ZiMusicBot";
- * import { YouTubePlugin, SpotifyPlugin } from "@ziplayer/plugin";
+ * import { ZiMusicBot } from "@ziplayer/express";
  *
  * const bot = new ZiMusicBot(client, {
- *   plugins: [new YouTubePlugin(), new SpotifyPlugin()],
  *   prefix: "!",
  * });
  * ```
@@ -143,10 +133,10 @@ export class ZiMusicBot {
 	private readonly leaveTimeout: number;
 	private readonly color: ColorResolvable;
 	private readonly playerIcon: iconType;
-	// private readonly DEBUG: (a: any) => {};
+	private readonly options: ZiMusicBotOptions;
 
 	constructor(client: Client, options: ZiMusicBotOptions = {}) {
-		// this.DEBUG = options.debug;
+		this.options = options;
 		this.client = client;
 		this._checkClient();
 		this.prefix = options.prefix ?? "!";
@@ -170,12 +160,11 @@ export class ZiMusicBot {
 		this._registerDiscordEvents();
 		this._attachPlayerEvents();
 	}
-	debug(arg: any) {
-		// if (typeof this.DEBUG == "function") {
-		// 	this.DEBUG(...arg);
-		// }
-		console.log(arg);
+
+	private debug(message?: any, ...optionalParams: any[]): void {
+		if (this.options.debug) this.options.debug(`[ZiMusicBot] ${message}`, ...optionalParams);
 	}
+
 	// ─── Discord listeners ─────────────────────────────────────────────────────
 	private _checkClient(): void {
 		if (!this.client.options.intents.has(GatewayIntentBits.GuildVoiceStates))
@@ -226,7 +215,6 @@ export class ZiMusicBot {
 	}
 
 	private async _onInteraction(interaction: BaseInteraction): Promise<void> {
-		this.debug((interaction as ButtonInteraction)?.customId);
 		try {
 			if ((interaction as ButtonInteraction).isButton()) return await this._handleButton(interaction as ButtonInteraction);
 			if ((interaction as StringSelectMenuInteraction).isStringSelectMenu())
@@ -239,8 +227,6 @@ export class ZiMusicBot {
 	}
 
 	private async _onMessage(message: Message): Promise<void> {
-		this.debug(message?.content);
-
 		if (message.author.bot || !message.guild) return;
 		if (!message.content.startsWith(this.prefix)) return;
 
@@ -273,6 +259,8 @@ export class ZiMusicBot {
 					return await this._cmdLoop(message, args[0]);
 				case "autoplay":
 					return await this._cmdAutoPlay(message);
+				case "search":
+					return await this._cmdSearch(message, args.join(" "));
 			}
 		} catch (err) {
 			console.error("[ZiMusicBot] messageCreate error:", err);
@@ -291,31 +279,29 @@ export class ZiMusicBot {
 		if (!player && action !== "refresh")
 			return void interaction.reply({ content: "❌ Không có player đang hoạt động.", ephemeral: true });
 
+		if (action === "search") return await this._btnSearch(interaction, player!);
+
 		await interaction.deferUpdate().catch(() => {});
 
 		switch (action) {
 			case "refresh":
 				return await this._updatePlayerMessage(interaction.guildId!);
 			case "previous":
-				return await this._btnPrevious(interaction, player!);
+				return await this._btnPrevious(player!);
 			case "pause":
 				return await this._btnPause(player!);
 			case "next":
 				return await this._btnNext(player!);
 			case "stop":
-				return void player!.stop();
-			case "search":
-				return await this._btnSearch(interaction, player!);
+				return void player!.destroy();
 			case "autoPlay":
 				return await this._btnAutoPlay(player!);
 		}
 	}
 
-	private async _btnPrevious(interaction: ButtonInteraction, player: Player): Promise<void> {
-		const prev: Track | undefined = (player as any).previousTrack;
-		if (!prev) return;
-		await player.play(prev.url, interaction.user.id);
-		await this._updatePlayerMessage(interaction.guildId!);
+	private async _btnPrevious(player: Player): Promise<void> {
+		await player.previous();
+		await this._updatePlayerMessage(player.guildId!);
 	}
 
 	private async _btnPause(player: Player): Promise<void> {
@@ -327,8 +313,7 @@ export class ZiMusicBot {
 		(player as any).skip?.();
 	}
 
-	private async _btnSearch(interaction: ButtonInteraction, player: Player): Promise<void> {
-		// Modal phải được show trước khi defer — nếu đã deferUpdate thì dùng followUp thay thế
+	private async _btnSearch(interaction: ButtonInteraction, _player?: Player): Promise<void> {
 		const modal = new ModalBuilder()
 			.setCustomId("M_player_search")
 			.setTitle("🔍 Tìm kiếm bài hát")
@@ -343,31 +328,28 @@ export class ZiMusicBot {
 				),
 			);
 
-		// Nếu interaction chưa bị reply/defer thì show modal trực tiếp
-		if (!interaction.replied && !interaction.deferred) {
-			await interaction.showModal(modal);
-		} else {
-			// Sau khi deferUpdate không thể showModal — gửi ephemeral hướng dẫn
-			await interaction
-				.followUp({
-					content: "Vui lòng dùng lệnh `!play <tên bài>` để tìm kiếm.",
-					ephemeral: true,
-				})
-				.catch(() => {});
-			return;
-		}
+		await interaction.showModal(modal);
 
 		const submitted = await interaction.awaitModalSubmit({ time: 120_000 }).catch(() => null);
 		if (!submitted) return;
 
 		await submitted.deferUpdate().catch(() => {});
-		const query = submitted.fields.getTextInputValue("search_query");
 
-		if (!(player as any).isConnected) {
-			const vc = (interaction.member as any)?.voice?.channel as VoiceChannel | null;
-			if (vc) await player.connect(vc).catch(console.error);
+		const query = submitted.fields.getTextInputValue("search_query");
+		const vc = (interaction.member as any)?.voice?.channel as VoiceChannel | null;
+		if (!vc) {
+			await submitted.followUp({ content: "❌ Bạn cần vào voice channel trước.", ephemeral: true }).catch(() => {});
+			return;
 		}
-		await player.play(query, interaction.user.id).catch(console.error);
+
+		const textChannel = interaction.channel as TextChannel;
+
+		if (this._isUrl(query)) {
+			const player = await this.createPlayer(interaction.guildId!, vc, textChannel, interaction.user);
+			await player.play(query, interaction.user.id).catch(console.error);
+		} else {
+			await this._searchAndShowResults(submitted as any, interaction.guildId!, vc, textChannel, interaction.user, query);
+		}
 	}
 
 	private async _btnAutoPlay(player: Player): Promise<void> {
@@ -388,8 +370,19 @@ export class ZiMusicBot {
 	}
 
 	private async _selectTrack(interaction: StringSelectMenuInteraction): Promise<void> {
-		const player = this.manager.get(interaction.guildId!);
-		if (!player) return void interaction.reply({ content: "❌ Không có player.", ephemeral: true });
+		const vc = (interaction.member as any)?.voice?.channel as VoiceChannel | null;
+		if (!vc) {
+			await interaction.followUp({ content: "❌ Bạn cần vào voice channel trước.", ephemeral: true }).catch(() => {});
+			return;
+		}
+		const player = await this.createPlayer(interaction.guildId!, vc, interaction.channel as TextChannel, interaction.user).catch(
+			() => null,
+		);
+
+		if (!player) {
+			await interaction.reply({ content: "❌ Không thể tạo player.", components: [], embeds: [] }).catch(() => {});
+			return;
+		}
 
 		await interaction.deferUpdate().catch(() => {});
 		await player.play(interaction.values[0], interaction.user.id).catch(console.error);
@@ -402,8 +395,7 @@ export class ZiMusicBot {
 
 		const value = interaction.values[0];
 
-		// Search cần showModal trước khi deferUpdate
-		if (value === "Search") return await this._btnSearch(interaction as unknown as ButtonInteraction, player);
+		if (value === "Search") return await this._btnSearch(interaction as unknown as ButtonInteraction);
 
 		await interaction.deferUpdate().catch(() => {});
 
@@ -444,23 +436,11 @@ export class ZiMusicBot {
 			case "voldec":
 				player.setVolume(Math.max(player.volume - 10, 0));
 				break;
-
-			case "Lyrics":
-				if (player.userdata) player.userdata.lyrcsActive = !player.userdata?.lyrcsActive;
-				await interaction
-					.followUp({
-						content: `🎵 Lyrics: **${player.userdata?.lyrcsActive ? "ON" : "OFF"}**`,
-						ephemeral: true,
-					})
-					.catch(() => {});
-				break;
-
 			case "Shuffle":
 				(player.queue as any).shuffle?.();
 				break;
 
 			case "Filter":
-				// Emit để handler bên ngoài xử lý nếu cần
 				return;
 		}
 
@@ -481,10 +461,113 @@ export class ZiMusicBot {
 			return;
 		}
 
-		const player = await this.createPlayer(message.guildId!, vc, message.channel as TextChannel, message.author);
+		if (this._isUrl(query)) {
+			const player = await this.createPlayer(message.guildId!, vc, message.channel as TextChannel, message.author);
+			await player.play(query, message.author.id);
+			await this._sendOrUpdatePlayerMessage(player);
+		} else {
+			await this._searchAndShowResults(message, message.guildId!, vc, message.channel as TextChannel, message.author, query);
+		}
+	}
 
-		await player.play(query, message.author.id);
-		await this._sendOrUpdatePlayerMessage(message.channel as TextChannel, player);
+	// ─── Search helpers ────────────────────────────────────────────────────────
+	private _isUrl(query: string): boolean {
+		try {
+			const url = new URL(query);
+			return url.protocol === "http:" || url.protocol === "https:";
+		} catch {
+			return false;
+		}
+	}
+
+	/**
+	 * Tìm kiếm bài hát và hiển thị kết quả dạng dropdown.
+	 * Không nhận player — chỉ createPlayer khi user thực sự chọn bài.
+	 */
+	private async _searchAndShowResults(
+		context: { followUp: (opts: any) => Promise<Message> } | Message,
+		guildId: string,
+		voiceChannel: VoiceChannel,
+		textChannel: TextChannel,
+		requestedBy: User,
+		query: string,
+	): Promise<void> {
+		const result: SearchResult = await this.manager.search(query, requestedBy.id).catch(() => ({ tracks: [] }) as any);
+		const tracks: Track[] = result?.tracks ?? [];
+
+		if (!tracks.length) {
+			const msg = "❌ Không tìm thấy kết quả nào.";
+			"followUp" in context ?
+				await (context as any).followUp({ content: msg, ephemeral: true }).catch(() => {})
+			:	await (context as Message).reply(msg).catch(() => {});
+			return;
+		}
+
+		const top = tracks.slice(0, 10);
+		const embed = new EmbedBuilder()
+			.setTitle(`🔍 Kết quả: "${query}"`.slice(0, 256))
+			.setColor(this.color ?? "Random")
+			.setDescription(top.map((t, i) => `**${i + 1}.** ${t.title} — \`${t.duration}\``).join("\n"));
+
+		const selectRow = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
+			new StringSelectMenuBuilder()
+				.setCustomId("S_search_result")
+				.setPlaceholder("▶ | Chọn bài để thêm vào queue")
+				.addOptions(
+					top.map((t, i) =>
+						new StringSelectMenuOptionBuilder()
+							.setLabel(`${i + 1}: ${t.title}`.slice(0, 99))
+							.setDescription(`${t.duration}`.slice(0, 99))
+							.setValue(t.url)
+							.setEmoji(this.playerIcon.Playbutton),
+					),
+				)
+				.setMaxValues(1)
+				.setMinValues(1),
+		);
+
+		const reply: Message =
+			"followUp" in context ?
+				await (context as any).followUp({ embeds: [embed], components: [selectRow], ephemeral: true })
+			:	await (context as Message).reply({ embeds: [embed], components: [selectRow] });
+
+		const collector = reply.createMessageComponentCollector({
+			filter: (i: any) => i.user.id === requestedBy.id && i.customId === "S_search_result",
+			time: 60_000,
+			max: 1,
+		});
+
+		collector.on("collect", async (i: StringSelectMenuInteraction) => {
+			await i.deferUpdate().catch(() => {});
+			// createPlayer chỉ được gọi ở đây — khi user thực sự chọn bài
+			const player = await this.createPlayer(guildId, voiceChannel, textChannel, requestedBy).catch(() => null);
+			if (!player) {
+				await reply.edit({ content: "❌ Không thể tạo player.", components: [], embeds: [] }).catch(() => {});
+				return;
+			}
+			await player.play(i.values[0], requestedBy.id).catch(console.error);
+			await reply.edit({ components: [] }).catch(() => {});
+			await this._sendOrUpdatePlayerMessage(player);
+		});
+
+		collector.on("end", (_: any, reason: string) => {
+			if (reason === "time") reply.edit({ components: [] }).catch(() => {});
+		});
+	}
+
+	private async _cmdSearch(message: Message, query: string): Promise<void> {
+		if (!query) {
+			await message.reply("❌ Vui lòng nhập tên bài hát.\nVí dụ: `!search Never Gonna Give You Up`");
+			return;
+		}
+
+		const vc = (message.member as any)?.voice?.channel as VoiceChannel | null;
+		if (!vc) {
+			await message.reply("❌ Bạn cần vào voice channel trước.");
+			return;
+		}
+
+		await this._searchAndShowResults(message, message.guildId!, vc, message.channel as TextChannel, message.author, query);
 	}
 
 	private async _cmdSkip(message: Message): Promise<void> {
@@ -548,7 +631,7 @@ export class ZiMusicBot {
 	private async _cmdNowPlaying(message: Message): Promise<void> {
 		const p = this._getPlayerOrReply(message);
 		if (!p) return;
-		await this._sendOrUpdatePlayerMessage(message.channel as TextChannel, p);
+		await this._sendOrUpdatePlayerMessage(p);
 	}
 
 	private async _cmdShuffle(message: Message): Promise<void> {
@@ -586,6 +669,7 @@ export class ZiMusicBot {
 
 	private _attachPlayerEvents(): void {
 		const update = (p: Player): Promise<void> => this._updatePlayerMessage(p.guildId);
+		const create = (p: Player): Promise<void> => this._sendOrUpdatePlayerMessage(p);
 
 		this.manager.on("trackStart", (_p, _t) => {
 			void update(_p);
@@ -617,9 +701,6 @@ export class ZiMusicBot {
 		this.manager.on("filterRemoved", (_p, _f) => {
 			void update(_p);
 		});
-		this.manager.on("lyricsCreate", (_p, _t, _l) => {
-			void update(_p);
-		});
 		this.manager.on("playerDestroy", (_p) => {
 			try {
 				_p.userdata?.PlayerMessage.delete().catch(() => {});
@@ -633,8 +714,6 @@ export class ZiMusicBot {
 		this.manager.on("connectionError", (_p, err) => {
 			console.error(`[ZiMusicBot][${_p.guildId}] connectionError:`, (err as Error)?.message ?? err);
 		});
-
-		this.manager.on("debug", this.debug);
 	}
 
 	// ─── Player message helpers ────────────────────────────────────────────────
@@ -747,7 +826,6 @@ export class ZiMusicBot {
 				{ Label: "Unmute", Description: "Unmute", Value: "Unmute", Emoji: this.playerIcon.volinc },
 				{ Label: "Vol +", Description: "Volume up", Value: "volinc", Emoji: this.playerIcon.volinc },
 				{ Label: "Vol -", Description: "Volume down", Value: "voldec", Emoji: this.playerIcon.voldec },
-				{ Label: "Lyrics", Description: "Lyrics", Value: "Lyrics", Emoji: this.playerIcon.lyrics },
 				{ Label: "Shuffle", Description: "Shuffle", Value: "Shuffle", Emoji: this.playerIcon.shuffle },
 				{ Label: "Filter", Description: "Manage filters", Value: "Filter", Emoji: this.playerIcon.fillter },
 			];
@@ -820,35 +898,28 @@ export class ZiMusicBot {
 		}
 
 		// ── Status fields ──
-		embed.addFields(
-			{
-				name: `"Loop": ${this.repeatMode(player.loop?.(), player.autoPlay?.())}`,
-				value: " ",
-				inline: true,
-			},
-			{
-				name: `Lyrics: ${player.userdata?.lyrcsActive ? "ON" : "OFF"}`,
-				value: " ",
-				inline: true,
-			},
-		);
+		embed.addFields({
+			name: `"Loop": ${this.repeatMode(player.loop?.(), player.autoPlay?.())}`,
+			value: " ",
+			inline: true,
+		});
 
 		code.embeds = [embed];
 		code.files = [];
 		return code;
 	}
 
-	private async _sendOrUpdatePlayerMessage(channel: TextChannel, player: Player): Promise<void> {
+	private async _sendOrUpdatePlayerMessage(player: Player): Promise<void> {
 		const code = await this.renderPlayerUI({ player, tracks: player.currentTrack }).catch(() => null);
 		if (!code) return;
 
 		if (!!player.userdata && !!player.userdata.PlayerMessage) {
 			await player.userdata.PlayerMessage.edit(code).catch(async () => {
-				const msg = await channel.send(code).catch(() => null);
+				const msg = await player.userdata?.textChannel.send(code).catch(() => null);
 				if (msg && player.userdata) player.userdata.PlayerMessage = msg;
 			});
 		} else {
-			const msg = await channel.send(code).catch(() => null);
+			const msg = await player.userdata?.textChannel.send(code).catch(() => null);
 			if (msg && player.userdata) player.userdata.PlayerMessage = msg;
 		}
 	}
@@ -886,6 +957,7 @@ export class ZiMusicBot {
 			leaveOnEnd: this.leaveOnEnd,
 			leaveTimeout: this.leaveTimeout,
 			userdata: { requestedBy, textChannel },
+			...this.options.playerOptions,
 		});
 		if (!player?.connection) {
 			await player.connect(voiceChannel);
@@ -896,10 +968,10 @@ export class ZiMusicBot {
 	/**
 	 * Shorthand: phát nhạc và cập nhật/gửi player message trong channel.
 	 */
-	async play(guildId: string, query: string, user: User, textChannel: TextChannel): Promise<void> {
+	async play(guildId: string, query: string, user: User): Promise<void> {
 		const player = this.manager.get(guildId);
 		if (!player) throw new Error(`No active player for guild ${guildId}. Call createPlayer first.`);
 		await player.play(query, user.id);
-		await this._sendOrUpdatePlayerMessage(textChannel, player);
+		await this._sendOrUpdatePlayerMessage(player);
 	}
 }
