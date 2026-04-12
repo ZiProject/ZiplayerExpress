@@ -25,7 +25,7 @@ import {
 	BaseMessageOptions,
 } from "discord.js";
 import { PlayerManager, Player, Track, BasePlugin, BaseExtension, SearchResult, PlayerOptions } from "ziplayer";
-import { YouTubePlugin, SoundCloudPlugin, AttachmentsPlugin } from "@ziplayer/plugin";
+import { YouTubePlugin, SoundCloudPlugin, AttachmentsPlugin, SpotifyPlugin } from "@ziplayer/plugin";
 import { YTexec } from "@ziplayer/ytexecplug";
 // ─────────────────────────────────────────────────────────────────────────────
 //  Icons
@@ -152,6 +152,7 @@ export class ZiMusicBot {
 					fistStream: new YTexec().getStream,
 				}),
 				new SoundCloudPlugin(),
+				new SpotifyPlugin(),
 				new AttachmentsPlugin(),
 			],
 			extensions: options.extensions ?? [],
