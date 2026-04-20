@@ -27,6 +27,8 @@ import {
 import { PlayerManager, Player, Track, BasePlugin, BaseExtension, SearchResult, PlayerOptions } from "ziplayer";
 import { YouTubePlugin, SoundCloudPlugin, AttachmentsPlugin, SpotifyPlugin } from "@ziplayer/plugin";
 import { YTexec } from "@ziplayer/ytexecplug";
+import { InfinityPlugin } from "@ziplayer/infinity";
+
 // ─────────────────────────────────────────────────────────────────────────────
 //  Icons
 // ─────────────────────────────────────────────────────────────────────────────
@@ -153,6 +155,7 @@ export class ZiMusicBot {
 				}),
 				new SoundCloudPlugin(),
 				new SpotifyPlugin(),
+				new InfinityPlugin(),
 				new AttachmentsPlugin(),
 			],
 			extensions: options.extensions ?? [],
