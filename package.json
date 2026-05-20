@@ -1,6 +1,6 @@
 {
 	"name": "@ziplayer/express",
-	"version": "0.2.6",
+	"version": "0.2.7",
 	"description": "A modular Discord voice player with plugin system",
 	"keywords": [
 		"ZiPlayer",
@@ -26,11 +26,11 @@
 		"prepare": "npm run build"
 	},
 	"dependencies": {
-		"@ziplayer/infinity": "^0.0.2",
-		"@ziplayer/plugin": "^0.2.6",
+		"@ziplayer/infinity": "^0.0.3",
+		"@ziplayer/plugin": "^0.3.3",
 		"@ziplayer/ytexecplug": "^0.0.2",
 		"discord.js": "^14.25.1",
 		"opusscript": "^0.1.1",
-		"ziplayer": "^0.2.7"
+		"ziplayer": "^0.3.6"
 	}
 }
