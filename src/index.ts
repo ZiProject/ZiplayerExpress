@@ -26,7 +26,6 @@ import {
 } from "discord.js";
 import { PlayerManager, Player, Track, BasePlugin, BaseExtension, SearchResult, PlayerOptions } from "ziplayer";
 import { YouTubePlugin, SoundCloudPlugin, AttachmentsPlugin, SpotifyPlugin } from "@ziplayer/plugin";
-import { YTexec } from "@ziplayer/ytexecplug";
 import { InfinityPlugin } from "@ziplayer/infinity";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -150,9 +149,7 @@ export class ZiMusicBot {
 		this.playerIcon = { ...defaultplayerIcon, ...options.icon };
 		this.manager = new PlayerManager({
 			plugins: options.plugins ?? [
-				new YouTubePlugin({
-					fistStream: new YTexec().getStream,
-				}),
+				new YouTubePlugin(),
 				new SoundCloudPlugin(),
 				new SpotifyPlugin(),
 				new InfinityPlugin(),
